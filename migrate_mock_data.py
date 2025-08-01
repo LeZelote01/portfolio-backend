@@ -186,10 +186,10 @@ MOCK_DATA = {
     ],
     
     "stats": [
-        {"label": "Projets réalisés", "value": "18+", "icon": "Code", "order_index": 1},
-        {"label": "Clients satisfaits", "value": "12", "icon": "Users", "order_index": 2},
-        {"label": "Vulnérabilités détectées", "value": "150+", "icon": "Shield", "order_index": 3},
-        {"label": "Heures de développement", "value": "500+", "icon": "Clock", "order_index": 4}
+        {"title": "Projets réalisés", "value": "18", "suffix": "+", "icon": "Code", "order_index": 1},
+        {"title": "Clients satisfaits", "value": "12", "suffix": "", "icon": "Users", "order_index": 2},
+        {"title": "Vulnérabilités détectées", "value": "150", "suffix": "+", "icon": "Shield", "order_index": 3},
+        {"title": "Heures de développement", "value": "500", "suffix": "+", "icon": "Clock", "order_index": 4}
     ],
     
     "social": [
@@ -398,14 +398,15 @@ async def migrate_statistics():
     print("🔄 Migrating statistics...")
     
     for stat_data in MOCK_DATA["stats"]:
-        existing = await db.statistics.find_one({"label": stat_data["label"]})
+        existing = await db.statistics.find_one({"title": stat_data["title"]})
         if existing:
-            print(f"ℹ️ Statistic '{stat_data['label']}' already exists, skipping...")
+            print(f"ℹ️ Statistic '{stat_data['title']}' already exists, skipping...")
             continue
+        
         
         stat_obj = Statistic(**stat_data)
         await db.statistics.insert_one(stat_obj.dict())
-        print(f"✅ Statistic '{stat_data['label']}' migrated successfully")
+        print(f"✅ Statistic '{stat_data['title']}' migrated successfully")
 
 
 async def migrate_social_links():

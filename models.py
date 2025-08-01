@@ -73,19 +73,22 @@ class Technology(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     category: str
-    icon: str
+    level: str = "intermediate"  # beginner, intermediate, advanced, expert
+    color: str = "#3b82f6"  # Hex color for display
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 class TechnologyCreate(BaseModel):
     name: str
     category: str
-    icon: str
+    level: str = "intermediate"
+    color: str = "#3b82f6"
 
 class TechnologyUpdate(BaseModel):
     name: Optional[str] = None
     category: Optional[str] = None
-    icon: Optional[str] = None
+    level: Optional[str] = None
+    color: Optional[str] = None
 
 
 # Project Model
@@ -199,23 +202,32 @@ class TestimonialUpdate(BaseModel):
 # Statistics Model
 class Statistic(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    label: str
+    title: str
     value: str
+    suffix: Optional[str] = None
+    description: Optional[str] = None
     icon: str
+    color: str = "#3b82f6"
     order_index: Optional[int] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 class StatisticCreate(BaseModel):
-    label: str
+    title: str
     value: str
+    suffix: Optional[str] = None
+    description: Optional[str] = None
     icon: str
+    color: str = "#3b82f6"
     order_index: Optional[int] = None
 
 class StatisticUpdate(BaseModel):
-    label: Optional[str] = None
+    title: Optional[str] = None
     value: Optional[str] = None
+    suffix: Optional[str] = None
+    description: Optional[str] = None
     icon: Optional[str] = None
+    color: Optional[str] = None
     order_index: Optional[int] = None
 
 
@@ -284,9 +296,135 @@ class AdminLogin(BaseModel):
     username: str
     password: str
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+class AdminUpdate(BaseModel):
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
+
 class Token(BaseModel):
     access_token: str
     token_type: str
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+
+
+# Resource Model (for downloads/guides)
+class Resource(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    description: str
+    category: str  # Guide, Template, Script, Tool, etc.
+    type: str  # PDF, ZIP, DOC, etc.
+    size: str  # e.g., "2.5 MB"
+    pages: Optional[int] = None
+    downloads: int = 0
+    rating: float = 0.0
+    featured: bool = False
+    tags: List[str] = []
+    difficulty: Optional[str] = "Débutant"
+    download_url: Optional[str] = None
+    file_path: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ResourceCreate(BaseModel):
+    title: str
+    description: str
+    category: str
+    type: str
+    size: str
+    pages: Optional[int] = None
+    rating: float = 0.0
+    featured: bool = False
+    tags: List[str] = []
+    difficulty: Optional[str] = "Débutant"
+    download_url: Optional[str] = None
+    file_path: Optional[str] = None
+
+class ResourceUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    type: Optional[str] = None
+    size: Optional[str] = None
+    pages: Optional[int] = None
+    rating: Optional[float] = None
+    featured: Optional[bool] = None
+    tags: Optional[List[str]] = None
+    difficulty: Optional[str] = None
+    download_url: Optional[str] = None
+    file_path: Optional[str] = None
+
+
+# Blog Post Model
+class BlogPost(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    slug: str  # URL-friendly version of title
+    excerpt: str  # Short description
+    content: str  # Full blog content
+    category: str  # Cybersécurité, Python, Tutoriel, etc.
+    tags: List[str] = []
+    featured_image: Optional[str] = None
+    published: bool = False
+    featured: bool = False
+    views: int = 0
+    reading_time: int = 5  # minutes
+    author: str = "Jean Yves"
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    published_at: Optional[datetime] = None
+
+class BlogPostCreate(BaseModel):
+    title: str
+    slug: str
+    excerpt: str
+    content: str
+    category: str
+    tags: List[str] = []
+    featured_image: Optional[str] = None
+    published: bool = False
+    featured: bool = False
+    reading_time: int = 5
+    author: str = "Jean Yves"
+
+class BlogPostUpdate(BaseModel):
+    title: Optional[str] = None
+    slug: Optional[str] = None
+    excerpt: Optional[str] = None
+    content: Optional[str] = None
+    category: Optional[str] = None
+    tags: Optional[List[str]] = None
+    featured_image: Optional[str] = None
+    published: Optional[bool] = None
+    featured: Optional[bool] = None
+    reading_time: Optional[int] = None
+    author: Optional[str] = None
+
+
+# Public Testimonial Submission (for visitors)
+class PublicTestimonialSubmission(BaseModel):
+    name: str
+    email: EmailStr
+    company: Optional[str] = None
+    role: Optional[str] = None
+    content: str
+    rating: int  # 1-5
+    service_used: Optional[str] = None  # Which service they used
+
+class PendingTestimonial(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    email: EmailStr
+    company: Optional[str] = None
+    role: Optional[str] = None
+    content: str
+    rating: int
+    service_used: Optional[str] = None
+    status: str = "pending"  # pending, approved, rejected
+    submitted_at: datetime = Field(default_factory=datetime.utcnow)
+    reviewed_at: Optional[datetime] = None

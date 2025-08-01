@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer
 from datetime import timedelta, datetime
 
-from models import AdminLogin, Token, AdminUser, AdminUserCreate
+from models import AdminLogin, Token, AdminUser, AdminUserCreate, PasswordChange, AdminUpdate
 from auth import authenticate_user, create_access_token, get_current_user, create_default_admin_user, get_password_hash
 
 # Create auth router
@@ -98,8 +98,7 @@ async def create_admin_user(
 
 @auth_router.post("/change-password")
 async def change_password(
-    current_password: str,
-    new_password: str,
+    password_data: PasswordChange,
     current_user: AdminUser = Depends(get_current_user)
 ):
     """Change current user's password"""
@@ -113,20 +112,83 @@ async def change_password(
     
     try:
         # Verify current password
-        if not verify_password(current_password, current_user.hashed_password):
+        if not verify_password(password_data.current_password, current_user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Current password is incorrect"
             )
         
         # Update password
-        new_hashed_password = get_password_hash(new_password)
+        new_hashed_password = get_password_hash(password_data.new_password)
         await db.admin_users.update_one(
             {"id": current_user.id},
             {"$set": {"hashed_password": new_hashed_password}}
         )
         
         return {"message": "Password changed successfully"}
+        
+    finally:
+        client.close()
+
+
+@auth_router.put("/update-profile", response_model=AdminUser)
+async def update_admin_profile(
+    profile_data: AdminUpdate,
+    current_user: AdminUser = Depends(get_current_user)
+):
+    """Update current user's profile information"""
+    from motor.motor_asyncio import AsyncIOMotorClient
+    import os
+    
+    mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+    client = AsyncIOMotorClient(mongo_url)
+    db = client[os.environ.get('DB_NAME', 'test_database')]
+    
+    try:
+        update_data = {}
+        
+        # Check if username is being updated and if it's unique
+        if profile_data.username and profile_data.username != current_user.username:
+            existing_user = await db.admin_users.find_one({
+                "username": profile_data.username,
+                "id": {"$ne": current_user.id}
+            })
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Username already exists"
+                )
+            update_data["username"] = profile_data.username
+        
+        # Check if email is being updated and if it's unique
+        if profile_data.email and profile_data.email != current_user.email:
+            existing_email = await db.admin_users.find_one({
+                "email": profile_data.email,
+                "id": {"$ne": current_user.id}
+            })
+            if existing_email:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already exists"
+                )
+            update_data["email"] = profile_data.email
+        
+        if not update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No changes provided"
+            )
+        
+        # Update user profile
+        update_data["updated_at"] = datetime.utcnow()
+        await db.admin_users.update_one(
+            {"id": current_user.id},
+            {"$set": update_data}
+        )
+        
+        # Return updated user
+        updated_user = await db.admin_users.find_one({"id": current_user.id})
+        return AdminUser(**updated_user)
         
     finally:
         client.close()

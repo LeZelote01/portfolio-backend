@@ -14,6 +14,9 @@ from models import (
     Statistic, StatisticCreate, StatisticUpdate,
     SocialLink, SocialLinkCreate, SocialLinkUpdate,
     ProcessStep, ProcessStepCreate, ProcessStepUpdate,
+    Resource, ResourceCreate, ResourceUpdate,
+    BlogPost, BlogPostCreate, BlogPostUpdate,
+    PendingTestimonial,
     AdminUser
 )
 from auth import get_current_user
@@ -304,6 +307,54 @@ async def delete_service(service_id: str, current_user: AdminUser = Depends(get_
 
 # ================== TESTIMONIAL ROUTES ==================
 
+# IMPORTANT: Routes plus spécifiques (avec /pending) DOIVENT être avant les routes avec paramètres
+@admin_router.get("/testimonials/pending", response_model=List[PendingTestimonial])
+async def get_pending_testimonials(current_user: AdminUser = Depends(get_current_user)):
+    """Get all pending testimonials (requires authentication)"""
+    testimonials = await db.pending_testimonials.find({"status": "pending"}).sort("submitted_at", -1).to_list(100)
+    return [PendingTestimonial(**testimonial) for testimonial in testimonials]
+
+@admin_router.put("/testimonials/pending/{testimonial_id}/approve")
+async def approve_testimonial(testimonial_id: str, current_user: AdminUser = Depends(get_current_user)):
+    """Approve pending testimonial and move to testimonials (requires authentication)"""
+    pending = await db.pending_testimonials.find_one({"id": testimonial_id})
+    if not pending:
+        raise HTTPException(status_code=404, detail="Pending testimonial not found")
+    
+    # Create testimonial from pending
+    testimonial_data = {
+        "name": pending["name"],
+        "role": pending.get("role", "Client"),
+        "company": pending.get("company", ""),
+        "content": pending["content"],
+        "rating": pending["rating"],
+        "featured": False
+    }
+    
+    testimonial_obj = Testimonial(**testimonial_data)
+    await db.testimonials.insert_one(testimonial_obj.dict())
+    
+    # Update pending status
+    await db.pending_testimonials.update_one(
+        {"id": testimonial_id},
+        {"$set": {"status": "approved", "reviewed_at": datetime.utcnow()}}
+    )
+    
+    return {"message": "Testimonial approved and added"}
+
+@admin_router.put("/testimonials/pending/{testimonial_id}/reject")
+async def reject_testimonial(testimonial_id: str, current_user: AdminUser = Depends(get_current_user)):
+    """Reject pending testimonial (requires authentication)"""
+    result = await db.pending_testimonials.update_one(
+        {"id": testimonial_id},
+        {"$set": {"status": "rejected", "reviewed_at": datetime.utcnow()}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Pending testimonial not found")
+    
+    return {"message": "Testimonial rejected"}
+
 @admin_router.get("/testimonials", response_model=List[Testimonial])
 async def get_testimonials(current_user: AdminUser = Depends(get_current_user)):
     """Get all testimonials (requires authentication)"""
@@ -476,3 +527,114 @@ async def delete_process_step(step_id: str, current_user: AdminUser = Depends(ge
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Process step not found")
     return {"message": "Process step deleted successfully"}
+
+
+# ================== RESOURCE ROUTES ==================
+
+@admin_router.get("/resources", response_model=List[Resource])
+async def get_resources(current_user: AdminUser = Depends(get_current_user)):
+    """Get all resources (requires authentication)"""
+    resources = await db.resources.find().sort("created_at", -1).to_list(100)
+    return [Resource(**resource) for resource in resources]
+
+@admin_router.get("/resources/{resource_id}", response_model=Resource)
+async def get_resource(resource_id: str, current_user: AdminUser = Depends(get_current_user)):
+    """Get specific resource (requires authentication)"""
+    resource = await db.resources.find_one({"id": resource_id})
+    if not resource:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    return Resource(**resource)
+
+@admin_router.post("/resources", response_model=Resource)
+async def create_resource(resource_input: ResourceCreate, current_user: AdminUser = Depends(get_current_user)):
+    """Create new resource (requires authentication)"""
+    resource_dict = resource_input.dict()
+    resource_obj = Resource(**resource_dict)
+    await db.resources.insert_one(resource_obj.dict())
+    return resource_obj
+
+@admin_router.put("/resources/{resource_id}", response_model=Resource)
+async def update_resource(resource_id: str, resource_input: ResourceUpdate, current_user: AdminUser = Depends(get_current_user)):
+    """Update resource (requires authentication)"""
+    update_dict = resource_input.dict(exclude_unset=True)
+    update_dict["updated_at"] = datetime.utcnow()
+    
+    result = await db.resources.update_one(
+        {"id": resource_id},
+        {"$set": update_dict}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    
+    updated_resource = await db.resources.find_one({"id": resource_id})
+    return Resource(**updated_resource)
+
+@admin_router.delete("/resources/{resource_id}")
+async def delete_resource(resource_id: str, current_user: AdminUser = Depends(get_current_user)):
+    """Delete resource (requires authentication)"""
+    result = await db.resources.delete_one({"id": resource_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Resource not found")
+    return {"message": "Resource deleted successfully"}
+
+
+# ================== BLOG ROUTES ==================
+
+@admin_router.get("/blog", response_model=List[BlogPost])
+async def get_blog_posts(current_user: AdminUser = Depends(get_current_user)):
+    """Get all blog posts (requires authentication)"""
+    posts = await db.blog_posts.find().sort("created_at", -1).to_list(100)
+    return [BlogPost(**post) for post in posts]
+
+@admin_router.get("/blog/{post_id}", response_model=BlogPost)
+async def get_blog_post(post_id: str, current_user: AdminUser = Depends(get_current_user)):
+    """Get specific blog post (requires authentication)"""
+    post = await db.blog_posts.find_one({"id": post_id})
+    if not post:
+        raise HTTPException(status_code=404, detail="Blog post not found")
+    return BlogPost(**post)
+
+@admin_router.post("/blog", response_model=BlogPost)
+async def create_blog_post(post_input: BlogPostCreate, current_user: AdminUser = Depends(get_current_user)):
+    """Create new blog post (requires authentication)"""
+    post_dict = post_input.dict()
+    # Set published_at if publishing
+    if post_dict.get("published", False):
+        post_dict["published_at"] = datetime.utcnow()
+    
+    post_obj = BlogPost(**post_dict)
+    await db.blog_posts.insert_one(post_obj.dict())
+    return post_obj
+
+@admin_router.put("/blog/{post_id}", response_model=BlogPost)
+async def update_blog_post(post_id: str, post_input: BlogPostUpdate, current_user: AdminUser = Depends(get_current_user)):
+    """Update blog post (requires authentication)"""
+    update_dict = post_input.dict(exclude_unset=True)
+    update_dict["updated_at"] = datetime.utcnow()
+    
+    # Set published_at if publishing for first time
+    if update_dict.get("published", False):
+        existing_post = await db.blog_posts.find_one({"id": post_id})
+        if existing_post and not existing_post.get("published_at"):
+            update_dict["published_at"] = datetime.utcnow()
+    
+    result = await db.blog_posts.update_one(
+        {"id": post_id},
+        {"$set": update_dict}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Blog post not found")
+    
+    updated_post = await db.blog_posts.find_one({"id": post_id})
+    return BlogPost(**updated_post)
+
+@admin_router.delete("/blog/{post_id}")
+async def delete_blog_post(post_id: str, current_user: AdminUser = Depends(get_current_user)):
+    """Delete blog post (requires authentication)"""
+    result = await db.blog_posts.delete_one({"id": post_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Blog post not found")
+    return {"message": "Blog post deleted successfully"}
+
